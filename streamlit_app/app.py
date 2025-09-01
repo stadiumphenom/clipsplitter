@@ -73,7 +73,7 @@ min_len = st.slider("Minimum Segment Length (seconds)", 1, 60, 5)
 st.markdown("### ⚙️ Export Settings")
 export_format = st.selectbox("Format", ["mp4", "webm"])
 resolution = st.selectbox("Resolution", ["Original", "720p", "1080p"])
-clip_naming = st.text_input("Clip Naming Template", value="clip_{index}.mp4")
+clip_naming = str(st.text_input("Clip Naming Template", value="clip_{index}.mp4") or "clip_{index}.mp4")
 
 # Save settings to session
 st.session_state["settings"] = {
@@ -105,6 +105,7 @@ if "segments" in st.session_state:
     for i, seg in enumerate(st.session_state["segments"]):
         st.markdown(f"**Clip {i+1}**: `{seg['start']:.2f}s → {seg['end']:.2f}s`")
         if st.button(f"Export Clip {i+1}", key=f"export_{i}"):
+            filename = clip_naming.replace("{index}", str(i + 1))
             path = export_clip(
                 st.session_state["video_path"],
                 seg["start"],
@@ -112,7 +113,7 @@ if "segments" in st.session_state:
                 st.session_state["video_id"],
                 export_format,
                 resolution,
-                str(clip_naming).replace("{index}", str(i + 1))
+                filename
             )
             with open(path, "rb") as f:
                 st.download_button("⬇ Download Clip", f, file_name=os.path.basename(path))
@@ -129,8 +130,5 @@ if "segments" in st.session_state:
         )
         with open(zip_path, "rb") as zf:
             st.download_button("⬇ Download ZIP", zf, file_name="clips.zip")
-
-        export_to_local(zip_path)  # Save in ./exports
-        st.success("✅ Export saved locally.")
 
 # End of file
