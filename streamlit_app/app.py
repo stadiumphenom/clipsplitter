@@ -7,7 +7,7 @@ import streamlit as st
 from datetime import datetime
 
 from cliplogic import analyze_equal, analyze_scene, export_clip, export_all_zip
-from utils import get_video_id, ensure_temp_dir, export_to_local
+from utils import get_video_id, ensure_temp_dir
 
 # --- CONFIG ---
 st.set_page_config(page_title="ClipSplitter Pro", layout="wide")
