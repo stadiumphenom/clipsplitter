@@ -1,0 +1,2 @@
+# ClipSplitter
+Pro Edition app.
