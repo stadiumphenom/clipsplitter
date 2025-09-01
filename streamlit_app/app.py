@@ -112,7 +112,7 @@ if "segments" in st.session_state:
                 st.session_state["video_id"],
                 export_format,
                 resolution,
-                clip_naming.replace("{index}", str(i + 1))
+                str(clip_naming).replace("{index}", str(i + 1))
             )
             with open(path, "rb") as f:
                 st.download_button("⬇ Download Clip", f, file_name=os.path.basename(path))
