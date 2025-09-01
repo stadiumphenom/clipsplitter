@@ -105,36 +105,26 @@ if "segments" in st.session_state:
     for i, seg in enumerate(st.session_state["segments"]):
         st.markdown(f"**Clip {i+1}**: `{seg['start']:.2f}s → {seg['end']:.2f}s`")
 
-        # Preview video
-        try:
-            preview_path = export_clip(
-                st.session_state["video_path"],
-                seg["start"],
-                seg["end"],
-                st.session_state["video_id"],
-                export_format,
-                resolution,
-                f"preview_{i + 1}.mp4"
-            )
-            with open(preview_path, "rb") as f:
-                st.video(f.read())
-        except Exception as e:
-            st.warning(f"⚠️ Preview failed: {e}")
+        # Video preview from main video
+        if "video_path" in st.session_state:
+            st.video(st.session_state["video_path"])
+            st.markdown(f"_Preview shows full video — segment range: {seg['start']:.2f}s to {seg['end']:.2f}s_")
 
         # Export button
         try:
             filename = str(clip_naming or "clip_{index}.mp4").replace("{index}", str(i + 1))
-            path = export_clip(
-                st.session_state["video_path"],
-                seg["start"],
-                seg["end"],
-                st.session_state["video_id"],
-                export_format,
-                resolution,
-                filename
-            )
-            with open(path, "rb") as f:
-                st.download_button("⬇ Download Clip", f, file_name=os.path.basename(path), key=f"download_{i}")
+            if st.button(f"Export Clip {i+1}", key=f"export_{i}"):
+                path = export_clip(
+                    st.session_state["video_path"],
+                    seg["start"],
+                    seg["end"],
+                    st.session_state["video_id"],
+                    export_format,
+                    resolution,
+                    filename
+                )
+                with open(path, "rb") as f:
+                    st.download_button("⬇ Download Clip", f, file_name=os.path.basename(path), key=f"download_{i}")
         except Exception as e:
             st.error(f"❌ Export failed for Clip {i+1}: {e}")
 
@@ -151,7 +141,8 @@ if "segments" in st.session_state:
             )
             with open(zip_path, "rb") as zf:
                 st.download_button("⬇ Download ZIP", zf, file_name="clips.zip")
+            st.success("✅ Export saved locally.")
         except Exception as e:
-            st.error(f"❌ Failed to export all: {e}")
+            st.error(f"❌ Export all failed: {e}")
 
 # End of file
