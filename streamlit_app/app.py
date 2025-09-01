@@ -73,7 +73,7 @@ min_len = st.slider("Minimum Segment Length (seconds)", 1, 60, 5)
 st.markdown("### ⚙️ Export Settings")
 export_format = st.selectbox("Format", ["mp4", "webm"])
 resolution = st.selectbox("Resolution", ["Original", "720p", "1080p"])
-clip_naming = str(st.text_input("Clip Naming Template", value="clip_{index}.mp4") or "clip_{index}.mp4")
+clip_naming = st.text_input("Clip Naming Template", value="clip_{index}.mp4")
 
 # Save settings to session
 st.session_state["settings"] = {
@@ -104,8 +104,26 @@ if "segments" in st.session_state:
 
     for i, seg in enumerate(st.session_state["segments"]):
         st.markdown(f"**Clip {i+1}**: `{seg['start']:.2f}s → {seg['end']:.2f}s`")
-        if st.button(f"Export Clip {i+1}", key=f"export_{i}"):
-            filename = clip_naming.replace("{index}", str(i + 1))
+
+        # Preview video
+        try:
+            preview_path = export_clip(
+                st.session_state["video_path"],
+                seg["start"],
+                seg["end"],
+                st.session_state["video_id"],
+                export_format,
+                resolution,
+                f"preview_{i + 1}.mp4"
+            )
+            with open(preview_path, "rb") as f:
+                st.video(f.read())
+        except Exception as e:
+            st.warning(f"⚠️ Preview failed: {e}")
+
+        # Export button
+        try:
+            filename = str(clip_naming or "clip_{index}.mp4").replace("{index}", str(i + 1))
             path = export_clip(
                 st.session_state["video_path"],
                 seg["start"],
@@ -116,19 +134,24 @@ if "segments" in st.session_state:
                 filename
             )
             with open(path, "rb") as f:
-                st.download_button("⬇ Download Clip", f, file_name=os.path.basename(path))
+                st.download_button("⬇ Download Clip", f, file_name=os.path.basename(path), key=f"download_{i}")
+        except Exception as e:
+            st.error(f"❌ Export failed for Clip {i+1}: {e}")
 
     # --- EXPORT ALL ---
     if st.button("📦 Export All as ZIP"):
-        zip_path = export_all_zip(
-            st.session_state["video_path"],
-            st.session_state["segments"],
-            st.session_state["video_id"],
-            export_format,
-            resolution,
-            clip_naming
-        )
-        with open(zip_path, "rb") as zf:
-            st.download_button("⬇ Download ZIP", zf, file_name="clips.zip")
+        try:
+            zip_path = export_all_zip(
+                st.session_state["video_path"],
+                st.session_state["segments"],
+                st.session_state["video_id"],
+                export_format,
+                resolution,
+                clip_naming
+            )
+            with open(zip_path, "rb") as zf:
+                st.download_button("⬇ Download ZIP", zf, file_name="clips.zip")
+        except Exception as e:
+            st.error(f"❌ Failed to export all: {e}")
 
 # End of file
