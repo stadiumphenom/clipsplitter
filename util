@@ -1,6 +1,13 @@
+import os
+import shutil
+
+
 def export_to_local(file_path, folder="exports"):
     os.makedirs(folder, exist_ok=True)
+
     base_name = os.path.basename(file_path)
     dest_path = os.path.join(folder, base_name)
-    os.rename(file_path, dest_path)
 
+    shutil.copy2(file_path, dest_path)
+
+    return dest_path
