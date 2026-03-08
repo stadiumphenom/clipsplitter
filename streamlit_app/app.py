@@ -33,6 +33,7 @@ def init_state():
         "video_meta": None,
         "segments": [],
         "preview_paths": {},
+        "export_paths": {},
         "settings": {
             "split_mode": "Equal length",
             "min_len": 10,
@@ -87,6 +88,7 @@ def load_project_payload(payload):
     st.session_state["segments"] = payload.get("segments", [])
     st.session_state["settings"] = payload.get("settings", st.session_state["settings"])
     st.session_state["preview_paths"] = {}
+    st.session_state["export_paths"] = {}
     st.session_state["project_loaded"] = True
 
 
@@ -112,10 +114,12 @@ def analyze_video():
             st.warning("No segments were found with the current settings.")
             st.session_state["segments"] = []
             st.session_state["preview_paths"] = {}
+            st.session_state["export_paths"] = {}
             return
 
         st.session_state["segments"] = segments
         st.session_state["preview_paths"] = {}
+        st.session_state["export_paths"] = {}
         st.success(f"Found {len(segments)} segments.")
 
     except ClipSplitterError as exc:
@@ -124,30 +128,13 @@ def analyze_video():
         st.error(f"Unexpected analysis failure: {exc}")
 
 
-def get_or_create_preview(index, seg):
-    preview_paths = st.session_state.get("preview_paths", {})
-    key = str(index)
-
-    existing = preview_paths.get(key)
-    if existing and os.path.exists(existing):
-        return existing
-
-    preview_path = generate_preview_clip(
-        filepath=st.session_state["video_path"],
-        start=float(seg["start"]),
-        end=float(seg["end"]),
-        video_id=st.session_state["video_id"],
-    )
-
-    preview_paths[key] = preview_path
-    st.session_state["preview_paths"] = preview_paths
-    return preview_path
-
-
 def render_segment_card(index, seg, export_format, resolution, clip_naming):
     start = float(seg["start"])
     end = float(seg["end"])
     duration = float(seg["duration"])
+
+    preview_key = str(index)
+    export_key = str(index)
 
     with st.container(border=True):
         col1, col2 = st.columns([2, 1])
@@ -157,13 +144,23 @@ def render_segment_card(index, seg, export_format, resolution, clip_naming):
             st.caption(f"{start:.2f}s → {end:.2f}s")
             st.write(f"Duration: {duration:.2f}s")
 
-            try:
-                preview_path = get_or_create_preview(index, seg)
+            if st.button(f"Preview Clip {index}", key=f"preview_btn_{index}"):
+                try:
+                    preview_path = generate_preview_clip(
+                        filepath=st.session_state["video_path"],
+                        start=start,
+                        end=end,
+                        video_id=st.session_state["video_id"],
+                    )
+                    st.session_state["preview_paths"][preview_key] = preview_path
+                except ClipSplitterError as exc:
+                    st.error(str(exc))
+                except Exception as exc:
+                    st.error(f"Preview failed for Clip {index}: {exc}")
+
+            preview_path = st.session_state["preview_paths"].get(preview_key)
+            if preview_path and os.path.exists(preview_path):
                 st.video(preview_path)
-            except ClipSplitterError as exc:
-                st.warning(f"Preview unavailable: {exc}")
-            except Exception as exc:
-                st.warning(f"Preview unavailable: {exc}")
 
         with col2:
             st.code(f"{start:.2f} - {end:.2f}", language="text")
@@ -174,7 +171,7 @@ def render_segment_card(index, seg, export_format, resolution, clip_naming):
                 ext=export_format,
             )
 
-            if st.button(f"Export Clip {index}", key=f"export_{index}"):
+            if st.button(f"Export Clip {index}", key=f"export_btn_{index}"):
                 try:
                     out_path = export_clip(
                         filepath=st.session_state["video_path"],
@@ -185,20 +182,23 @@ def render_segment_card(index, seg, export_format, resolution, clip_naming):
                         resolution=resolution,
                         filename=filename,
                     )
-
-                    with open(out_path, "rb") as f:
-                        st.download_button(
-                            label=f"Download Clip {index}",
-                            data=f.read(),
-                            file_name=os.path.basename(out_path),
-                            mime="video/mp4" if export_format == "mp4" else "video/webm",
-                            key=f"download_{index}",
-                        )
-
+                    st.session_state["export_paths"][export_key] = out_path
+                    st.success(f"Clip {index} exported.")
                 except ClipSplitterError as exc:
                     st.error(str(exc))
                 except Exception as exc:
                     st.error(f"Export failed for Clip {index}: {exc}")
+
+            export_path = st.session_state["export_paths"].get(export_key)
+            if export_path and os.path.exists(export_path):
+                with open(export_path, "rb") as f:
+                    st.download_button(
+                        label=f"Download Clip {index}",
+                        data=f.read(),
+                        file_name=os.path.basename(export_path),
+                        mime="video/mp4" if export_format == "mp4" else "video/webm",
+                        key=f"download_btn_{index}",
+                    )
 
 
 init_state()
@@ -268,6 +268,7 @@ if uploaded_file is not None:
         st.session_state["video_name"] = uploaded_file.name
         st.session_state["segments"] = []
         st.session_state["preview_paths"] = {}
+        st.session_state["export_paths"] = {}
 
         meta = probe_video(saved_path)
         st.session_state["video_meta"] = meta
@@ -291,7 +292,6 @@ if source_available():
         col3.metric("Format", meta.get("format_name", "unknown"))
 
 st.markdown("### Clipping Options")
-
 saved_settings = current_settings()
 
 split_mode = st.selectbox(
@@ -308,7 +308,6 @@ min_len = st.slider(
 )
 
 scene_threshold = saved_settings.get("scene_threshold", 0.30)
-
 if split_mode == "Scene detection":
     st.caption("Scene detection is a basic beta feature and may vary by source video.")
     scene_threshold = st.slider(
@@ -349,12 +348,10 @@ st.session_state["settings"] = {
 }
 
 analyze_disabled = not source_available()
-
 if st.button("Analyze", disabled=analyze_disabled):
     analyze_video()
 
 segments = st.session_state.get("segments", [])
-
 if segments:
     st.subheader("Segments")
 
@@ -377,7 +374,6 @@ if segments:
                 resolution=resolution,
                 naming_template=clip_naming,
             )
-
             with open(zip_path, "rb") as zf:
                 st.download_button(
                     "Download ZIP",
@@ -385,7 +381,6 @@ if segments:
                     file_name=f"{st.session_state['video_id']}_clips.zip",
                     mime="application/zip",
                 )
-
         except ClipSplitterError as exc:
             st.error(str(exc))
         except Exception as exc:
