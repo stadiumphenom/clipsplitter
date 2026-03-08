@@ -9,6 +9,7 @@ import ffmpeg
 
 class ClipSplitterError(Exception):
     """Application-level error for clean UI messaging."""
+    pass
 
 
 def _null_output_target() -> str:
@@ -96,7 +97,7 @@ def analyze_scene(filepath: str, threshold: float = 0.3, min_len: int = 3) -> Li
             .output(_null_output_target(), format="null", vf="showinfo")
             .global_args("-hide_banner", "-loglevel", "info", "-stats")
         )
-        out, err = stream.run(capture_stdout=True, capture_stderr=True)
+        _, err = stream.run(capture_stdout=True, capture_stderr=True)
 
         scene_times: List[float] = []
         for line in err.decode("utf-8", errors="ignore").splitlines():
@@ -126,6 +127,7 @@ def analyze_scene(filepath: str, threshold: float = 0.3, min_len: int = 3) -> Li
                 )
 
         return segments
+
     except ffmpeg.Error as exc:
         stderr = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else str(exc)
         raise ClipSplitterError(f"Scene detection failed: {stderr}") from exc
@@ -139,6 +141,48 @@ def _apply_resolution(stream, resolution: str):
     if resolution == "1080p":
         return stream.filter("scale", 1920, 1080, force_original_aspect_ratio="decrease")
     return stream
+
+
+def generate_preview_clip(
+    filepath: str,
+    start: float,
+    end: float,
+    video_id: str,
+    max_preview_seconds: int = 12,
+) -> str:
+    if end <= start:
+        raise ClipSplitterError("Preview end time must be greater than start time.")
+
+    if not os.path.exists(filepath):
+        raise ClipSplitterError("Source video file not found.")
+
+    preview_start = max(0, start)
+    preview_end = min(end, start + max_preview_seconds)
+
+    if preview_end <= preview_start:
+        raise ClipSplitterError("Preview duration is invalid.")
+
+    preview_name = (
+        f"preview_{video_id}_{int(preview_start * 1000)}_{int(preview_end * 1000)}.mp4"
+    )
+    preview_path = os.path.join(tempfile.gettempdir(), preview_name)
+
+    try:
+        inp = ffmpeg.input(filepath, ss=preview_start, to=preview_end)
+        stream = ffmpeg.output(
+            inp.video,
+            inp.audio,
+            preview_path,
+            vcodec="libx264",
+            acodec="aac",
+            movflags="+faststart",
+        )
+        _run_ffmpeg(stream.global_args("-y"))
+        return preview_path
+    except ClipSplitterError:
+        raise
+    except Exception as exc:
+        raise ClipSplitterError(f"Preview generation failed: {exc}") from exc
 
 
 def export_clip(
@@ -236,6 +280,7 @@ def export_all_zip(
                 zipf.write(path, arcname=arcname)
 
         return zip_name
+
     except ClipSplitterError:
         raise
     except Exception as exc:
