@@ -128,6 +128,37 @@ def analyze_video():
         st.error(f"Unexpected analysis failure: {exc}")
 
 
+def create_preview(index, seg):
+    preview_key = str(index)
+    preview_path = generate_preview_clip(
+        filepath=st.session_state["video_path"],
+        start=float(seg["start"]),
+        end=float(seg["end"]),
+        video_id=st.session_state["video_id"],
+    )
+    st.session_state["preview_paths"][preview_key] = preview_path
+
+
+def create_export(index, seg, export_format, resolution, clip_naming):
+    export_key = str(index)
+    filename = safe_export_filename(
+        clip_naming,
+        index=index,
+        ext=export_format,
+    )
+
+    out_path = export_clip(
+        filepath=st.session_state["video_path"],
+        start=float(seg["start"]),
+        end=float(seg["end"]),
+        video_id=st.session_state["video_id"],
+        fmt=export_format,
+        resolution=resolution,
+        filename=filename,
+    )
+    st.session_state["export_paths"][export_key] = out_path
+
+
 def render_segment_card(index, seg, export_format, resolution, clip_naming):
     start = float(seg["start"])
     end = float(seg["end"])
@@ -137,22 +168,17 @@ def render_segment_card(index, seg, export_format, resolution, clip_naming):
     export_key = str(index)
 
     with st.container(border=True):
-        col1, col2 = st.columns([2, 1])
+        left, right = st.columns([2, 1])
 
-        with col1:
+        with left:
             st.markdown(f"**Clip {index}**")
             st.caption(f"{start:.2f}s → {end:.2f}s")
             st.write(f"Duration: {duration:.2f}s")
 
-            if st.button(f"Preview Clip {index}", key=f"preview_btn_{index}"):
+            if st.button(f"Generate Preview {index}", key=f"preview_btn_{index}"):
                 try:
-                    preview_path = generate_preview_clip(
-                        filepath=st.session_state["video_path"],
-                        start=start,
-                        end=end,
-                        video_id=st.session_state["video_id"],
-                    )
-                    st.session_state["preview_paths"][preview_key] = preview_path
+                    create_preview(index, seg)
+                    st.success(f"Preview ready for Clip {index}.")
                 except ClipSplitterError as exc:
                     st.error(str(exc))
                 except Exception as exc:
@@ -162,28 +188,13 @@ def render_segment_card(index, seg, export_format, resolution, clip_naming):
             if preview_path and os.path.exists(preview_path):
                 st.video(preview_path)
 
-        with col2:
+        with right:
             st.code(f"{start:.2f} - {end:.2f}", language="text")
 
-            filename = safe_export_filename(
-                clip_naming,
-                index=index,
-                ext=export_format,
-            )
-
-            if st.button(f"Export Clip {index}", key=f"export_btn_{index}"):
+            if st.button(f"Prepare Clip {index}", key=f"export_btn_{index}"):
                 try:
-                    out_path = export_clip(
-                        filepath=st.session_state["video_path"],
-                        start=start,
-                        end=end,
-                        video_id=st.session_state["video_id"],
-                        fmt=export_format,
-                        resolution=resolution,
-                        filename=filename,
-                    )
-                    st.session_state["export_paths"][export_key] = out_path
-                    st.success(f"Clip {index} exported.")
+                    create_export(index, seg, export_format, resolution, clip_naming)
+                    st.success(f"Clip {index} is ready to download.")
                 except ClipSplitterError as exc:
                     st.error(str(exc))
                 except Exception as exc:
@@ -236,10 +247,8 @@ with st.sidebar:
             payload = json.load(project_file)
             load_project_payload(payload)
             st.success("Project loaded.")
-
             if not source_available():
                 st.info("Re-upload the original source video to analyze or export clips in this session.")
-
         except Exception as exc:
             st.error(f"Failed to load project JSON: {exc}")
 
@@ -286,10 +295,10 @@ if source_available():
 
     meta = st.session_state.get("video_meta") or {}
     if meta:
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Duration", f"{meta.get('duration', 0):.2f}s")
-        col2.metric("Resolution", f"{meta.get('width', '?')}×{meta.get('height', '?')}")
-        col3.metric("Format", meta.get("format_name", "unknown"))
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Duration", f"{meta.get('duration', 0):.2f}s")
+        c2.metric("Resolution", f"{meta.get('width', '?')}×{meta.get('height', '?')}")
+        c3.metric("Format", meta.get("format_name", "unknown"))
 
 st.markdown("### Clipping Options")
 saved_settings = current_settings()
@@ -347,8 +356,7 @@ st.session_state["settings"] = {
     "clip_naming": clip_naming.strip() or "clip_{index}",
 }
 
-analyze_disabled = not source_available()
-if st.button("Analyze", disabled=analyze_disabled):
+if st.button("Analyze", disabled=not source_available()):
     analyze_video()
 
 segments = st.session_state.get("segments", [])
@@ -364,7 +372,7 @@ if segments:
             clip_naming=clip_naming,
         )
 
-    if st.button("Export All as ZIP"):
+    if st.button("Prepare ZIP Export"):
         try:
             zip_path = export_all_zip(
                 filepath=st.session_state["video_path"],
@@ -374,14 +382,19 @@ if segments:
                 resolution=resolution,
                 naming_template=clip_naming,
             )
-            with open(zip_path, "rb") as zf:
-                st.download_button(
-                    "Download ZIP",
-                    data=zf.read(),
-                    file_name=f"{st.session_state['video_id']}_clips.zip",
-                    mime="application/zip",
-                )
+            st.session_state["zip_path"] = zip_path
+            st.success("ZIP is ready to download.")
         except ClipSplitterError as exc:
             st.error(str(exc))
         except Exception as exc:
             st.error(f"Export all failed: {exc}")
+
+    zip_path = st.session_state.get("zip_path")
+    if zip_path and os.path.exists(zip_path):
+        with open(zip_path, "rb") as zf:
+            st.download_button(
+                "Download ZIP",
+                data=zf.read(),
+                file_name=f"{st.session_state['video_id']}_clips.zip",
+                mime="application/zip",
+            )
