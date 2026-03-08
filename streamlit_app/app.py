@@ -34,6 +34,7 @@ def init_state():
         "segments": [],
         "preview_paths": {},
         "export_paths": {},
+        "zip_path": None,
         "settings": {
             "split_mode": "Equal length",
             "min_len": 10,
@@ -76,7 +77,7 @@ def save_project_payload():
         "settings": st.session_state.get("settings", {}),
         "note": (
             "Source video is not stored inside this JSON file. "
-            "Re-upload the original video after loading the project."
+            "Re-upload the original source video after loading the project."
         ),
     }
 
@@ -89,6 +90,7 @@ def load_project_payload(payload):
     st.session_state["settings"] = payload.get("settings", st.session_state["settings"])
     st.session_state["preview_paths"] = {}
     st.session_state["export_paths"] = {}
+    st.session_state["zip_path"] = None
     st.session_state["project_loaded"] = True
 
 
@@ -115,11 +117,13 @@ def analyze_video():
             st.session_state["segments"] = []
             st.session_state["preview_paths"] = {}
             st.session_state["export_paths"] = {}
+            st.session_state["zip_path"] = None
             return
 
         st.session_state["segments"] = segments
         st.session_state["preview_paths"] = {}
         st.session_state["export_paths"] = {}
+        st.session_state["zip_path"] = None
         st.success(f"Found {len(segments)} segments.")
 
     except ClipSplitterError as exc:
@@ -141,6 +145,7 @@ def create_preview(index, seg):
 
 def create_export(index, seg, export_format, resolution, clip_naming):
     export_key = str(index)
+
     filename = safe_export_filename(
         clip_naming,
         index=index,
@@ -168,48 +173,45 @@ def render_segment_card(index, seg, export_format, resolution, clip_naming):
     export_key = str(index)
 
     with st.container(border=True):
-        left, right = st.columns([2, 1])
+        st.markdown(f"### Clip {index}")
+        st.caption(f"{start:.2f}s → {end:.2f}s")
+        st.write(f"Duration: {duration:.2f}s")
+
+        left, right = st.columns(2)
 
         with left:
-            st.markdown(f"**Clip {index}**")
-            st.caption(f"{start:.2f}s → {end:.2f}s")
-            st.write(f"Duration: {duration:.2f}s")
-
             if st.button(f"Generate Preview {index}", key=f"preview_btn_{index}"):
                 try:
                     create_preview(index, seg)
-                    st.success(f"Preview ready for Clip {index}.")
                 except ClipSplitterError as exc:
                     st.error(str(exc))
                 except Exception as exc:
-                    st.error(f"Preview failed for Clip {index}: {exc}")
-
-            preview_path = st.session_state["preview_paths"].get(preview_key)
-            if preview_path and os.path.exists(preview_path):
-                st.video(preview_path)
+                    st.error(f"Preview failed: {exc}")
 
         with right:
-            st.code(f"{start:.2f} - {end:.2f}", language="text")
-
             if st.button(f"Prepare Clip {index}", key=f"export_btn_{index}"):
                 try:
                     create_export(index, seg, export_format, resolution, clip_naming)
-                    st.success(f"Clip {index} is ready to download.")
                 except ClipSplitterError as exc:
                     st.error(str(exc))
                 except Exception as exc:
-                    st.error(f"Export failed for Clip {index}: {exc}")
+                    st.error(f"Export failed: {exc}")
 
-            export_path = st.session_state["export_paths"].get(export_key)
-            if export_path and os.path.exists(export_path):
-                with open(export_path, "rb") as f:
-                    st.download_button(
-                        label=f"Download Clip {index}",
-                        data=f.read(),
-                        file_name=os.path.basename(export_path),
-                        mime="video/mp4" if export_format == "mp4" else "video/webm",
-                        key=f"download_btn_{index}",
-                    )
+        preview_path = st.session_state["preview_paths"].get(preview_key)
+        if preview_path and os.path.exists(preview_path):
+            with st.expander(f"Preview Clip {index}", expanded=True):
+                st.video(preview_path)
+
+        export_path = st.session_state["export_paths"].get(export_key)
+        if export_path and os.path.exists(export_path):
+            with open(export_path, "rb") as f:
+                st.download_button(
+                    label=f"Download Clip {index}",
+                    data=f.read(),
+                    file_name=os.path.basename(export_path),
+                    mime="video/mp4" if export_format == "mp4" else "video/webm",
+                    key=f"download_btn_{index}",
+                )
 
 
 init_state()
@@ -278,6 +280,7 @@ if uploaded_file is not None:
         st.session_state["segments"] = []
         st.session_state["preview_paths"] = {}
         st.session_state["export_paths"] = {}
+        st.session_state["zip_path"] = None
 
         meta = probe_video(saved_path)
         st.session_state["video_meta"] = meta
