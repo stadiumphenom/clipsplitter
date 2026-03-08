@@ -12,6 +12,7 @@ from cliplogic import (
     analyze_scene,
     export_all_zip,
     export_clip,
+    generate_preview_clip,
     probe_video,
 )
 from utils import (
@@ -31,6 +32,7 @@ def init_state():
         "video_name": None,
         "video_meta": None,
         "segments": [],
+        "preview_paths": {},
         "settings": {
             "split_mode": "Equal length",
             "min_len": 10,
@@ -84,6 +86,7 @@ def load_project_payload(payload):
     st.session_state["video_meta"] = payload.get("video_meta")
     st.session_state["segments"] = payload.get("segments", [])
     st.session_state["settings"] = payload.get("settings", st.session_state["settings"])
+    st.session_state["preview_paths"] = {}
     st.session_state["project_loaded"] = True
 
 
@@ -108,9 +111,11 @@ def analyze_video():
         if not segments:
             st.warning("No segments were found with the current settings.")
             st.session_state["segments"] = []
+            st.session_state["preview_paths"] = {}
             return
 
         st.session_state["segments"] = segments
+        st.session_state["preview_paths"] = {}
         st.success(f"Found {len(segments)} segments.")
 
     except ClipSplitterError as exc:
@@ -119,23 +124,50 @@ def analyze_video():
         st.error(f"Unexpected analysis failure: {exc}")
 
 
+def get_or_create_preview(index, seg):
+    preview_paths = st.session_state.get("preview_paths", {})
+    key = str(index)
+
+    existing = preview_paths.get(key)
+    if existing and os.path.exists(existing):
+        return existing
+
+    preview_path = generate_preview_clip(
+        filepath=st.session_state["video_path"],
+        start=float(seg["start"]),
+        end=float(seg["end"]),
+        video_id=st.session_state["video_id"],
+    )
+
+    preview_paths[key] = preview_path
+    st.session_state["preview_paths"] = preview_paths
+    return preview_path
+
+
 def render_segment_card(index, seg, export_format, resolution, clip_naming):
     start = float(seg["start"])
     end = float(seg["end"])
     duration = float(seg["duration"])
 
     with st.container(border=True):
-        col1, col2, col3 = st.columns([3, 2, 2])
+        col1, col2 = st.columns([2, 1])
 
         with col1:
             st.markdown(f"**Clip {index}**")
             st.caption(f"{start:.2f}s → {end:.2f}s")
             st.write(f"Duration: {duration:.2f}s")
 
+            try:
+                preview_path = get_or_create_preview(index, seg)
+                st.video(preview_path)
+            except ClipSplitterError as exc:
+                st.warning(f"Preview unavailable: {exc}")
+            except Exception as exc:
+                st.warning(f"Preview unavailable: {exc}")
+
         with col2:
             st.code(f"{start:.2f} - {end:.2f}", language="text")
 
-        with col3:
             filename = safe_export_filename(
                 clip_naming,
                 index=index,
@@ -214,7 +246,7 @@ with st.sidebar:
 st.title("🎬 ClipSplitter")
 st.write(
     "Upload a source video, split it by equal length or basic scene detection, "
-    "then export clips individually or as a ZIP."
+    "then preview and export clips individually or as a ZIP."
 )
 
 st.caption("Supported video types: mp4, mov, webm, mkv, mpeg4")
@@ -235,6 +267,7 @@ if uploaded_file is not None:
         st.session_state["video_path"] = saved_path
         st.session_state["video_name"] = uploaded_file.name
         st.session_state["segments"] = []
+        st.session_state["preview_paths"] = {}
 
         meta = probe_video(saved_path)
         st.session_state["video_meta"] = meta
