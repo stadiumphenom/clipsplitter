@@ -269,28 +269,32 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
-    try:
-        ensure_temp_dir()
-        saved_path = save_uploaded_file(uploaded_file)
-        video_id = get_video_id(uploaded_file.name)
+    current_uploaded_name = uploaded_file.name
+    saved_video_name = st.session_state.get("video_name")
 
-        st.session_state["video_id"] = video_id
-        st.session_state["video_path"] = saved_path
-        st.session_state["video_name"] = uploaded_file.name
-        st.session_state["segments"] = []
-        st.session_state["preview_paths"] = {}
-        st.session_state["export_paths"] = {}
-        st.session_state["zip_path"] = None
+    if saved_video_name != current_uploaded_name or not source_available():
+        try:
+            ensure_temp_dir()
+            saved_path = save_uploaded_file(uploaded_file)
+            video_id = get_video_id(uploaded_file.name)
 
-        meta = probe_video(saved_path)
-        st.session_state["video_meta"] = meta
+            st.session_state["video_id"] = video_id
+            st.session_state["video_path"] = saved_path
+            st.session_state["video_name"] = uploaded_file.name
+            st.session_state["segments"] = []
+            st.session_state["preview_paths"] = {}
+            st.session_state["export_paths"] = {}
+            st.session_state["zip_path"] = None
 
-        st.success(f"Uploaded: {uploaded_file.name}")
+            meta = probe_video(saved_path)
+            st.session_state["video_meta"] = meta
 
-    except ClipSplitterError as exc:
-        st.error(str(exc))
-    except Exception as exc:
-        st.error(f"Upload failed: {exc}")
+            st.success(f"Uploaded: {uploaded_file.name}")
+
+        except ClipSplitterError as exc:
+            st.error(str(exc))
+        except Exception as exc:
+            st.error(f"Upload failed: {exc}")
 
 if source_available():
     st.subheader("Source Video")
