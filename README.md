@@ -1,17 +1,27 @@
-# 🎬 ClipSplitter — Pro Edition
+# 🎬 ClipSplitter Pro
 
-Split full-length videos into smaller clips, instantly and easily.
+Split long videos into clean exportable clips using equal-length splitting or basic scene detection.
 
 ---
 
 ## ✨ Features
 
-- ⏱️ Equal-length or scene-based splitting
-- 📼 Upload `.mp4`, `.mov`, `.webm` files
-- 🖼️ Thumbnail previews of each clip
-- 🎮 Inline clip player & export controls
-- 📦 Export all clips as a ZIP
-- 💻 Built with Streamlit, FFmpeg, and Python
+- ⏱️ Equal-length splitting
+- 🎞️ Basic scene detection (beta)
+- 📼 Upload `.mp4`, `.mov`, `.webm`, `.mkv`
+- 🧩 Segment timestamp review
+- 📦 Export individual clips
+- 🗂️ Export all clips as ZIP
+- 💾 Save and load project settings
+- 💻 Built with Streamlit + FFmpeg + Python
+
+---
+
+## ⚠️ Current Status
+
+ClipSplitter Pro is an actively developed beta utility focused on fast local clipping workflows.
+
+Scene detection currently uses FFmpeg-based detection and may vary depending on source material.
 
 ---
 
